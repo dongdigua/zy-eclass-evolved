@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         延河课堂 课程树状导航
 // @namespace    zy-eclass-treeui
-// @version      0.3.0
+// @version      0.4.1
 // @description  Moodle 风格树状导航（魂兮归来！）
 // @author       digua
 // @match        https://zy-eclass.bit.edu.cn/course/*
@@ -542,7 +542,20 @@
       bodyEl.appendChild(el('div', 'zy-tree-empty-tip', '该课程暂无可见内容'));
     }
     for (const node of model.roots) bodyEl.appendChild(renderNode(node, 0));
+    bodyEl.appendChild(renderCredit());
     bodyEl.scrollTop = scrollTop;
+  }
+
+  const CREDIT_TEXT = 'made with ♥️ by 🍠 & 🐋';
+
+  // 和普通条目同样的行结构：占位箭头 + 图标 + 文本，只是不可点、不换行高亮
+  function renderCredit() {
+    const row = el('div', 'zy-tree-row zy-tree-static zy-tree-credit-row');
+    row.style.paddingLeft = '8px';
+    row.appendChild(el('span', 'zy-tree-caret', ''));
+    row.appendChild(el('span', 'zy-tree-icon', 'ℹ️'));
+    row.appendChild(el('span', 'zy-tree-label', CREDIT_TEXT));
+    return row;
   }
 
   function expandPathToCurrent() {
@@ -578,13 +591,14 @@
   // ---------------------------------------------------------------- shell
 
   function mount() {
+    if (document.getElementById('zy-tree')) return;
     const aside = el('aside', 'zy-tree');
     aside.id = 'zy-tree';
 
     const head = el('div', 'zy-tree-head');
     const brand = el('div', 'zy-tree-brand');
     brand.appendChild(el('span', 'zy-tree-brand-dot'));
-    brand.appendChild(el('span', 'zy-tree-brand-text', '课程导航'));
+    brand.appendChild(el('span', 'zy-tree-brand-text', '乐学导航'));
     head.appendChild(brand);
 
     const close = el('button', 'zy-tree-collapse', '«');
@@ -602,7 +616,7 @@
 
     const fab = el('button', 'zy-tree-fab', '☰');
     fab.type = 'button';
-    fab.title = '展开课程导航';
+    fab.title = '展开乐学导航';
     fab.addEventListener('click', () => setHidden(false));
     document.body.appendChild(fab);
     treeEl = aside;
@@ -631,8 +645,18 @@
     applyLayout();
   }
 
+  function syncViewport() {
+    if (!treeEl) return;
+    const vv = window.visualViewport;
+    const height = vv ? vv.height : window.innerHeight;
+    const top = vv ? vv.offsetTop : 0;
+    treeEl.style.setProperty('--zy-tree-vh', `${Math.round(height)}px`);
+    treeEl.style.setProperty('--zy-tree-vt', `${Math.round(top)}px`);
+  }
+
   function applyLayout() {
     if (!treeEl) return;
+    syncViewport();
     const narrow = isNarrow();
     const hidden = isHidden();
     treeEl.classList.toggle('zy-tree-hidden', hidden);
@@ -753,10 +777,13 @@
     });
 
     let resizeTimer = 0;
-    window.addEventListener('resize', () => {
+    const relayout = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(applyLayout, 120);
-    });
+    };
+    window.addEventListener('resize', relayout);
+    window.visualViewport?.addEventListener('resize', relayout);
+    window.visualViewport?.addEventListener('scroll', syncViewport);
   }
 
   const CSS = `
@@ -774,7 +801,14 @@ html.zy-tree-push body { padding-left: var(--zy-tree-w) !important; }
   transition: transform .18s ease;
 }
 #zy-tree.zy-tree-hidden { transform: translateX(-100%); }
-#zy-tree.zy-tree-overlay { box-shadow: 2px 0 24px rgba(16, 24, 40, .18); }
+#zy-tree.zy-tree-overlay {
+  /* 手机/窄窗下站点的布局视口被 min-width 撑到 1080，bottom:0 会让抽屉高到屏幕外，
+     这里改用 visualViewport 量出来的可视高度 */
+  top: var(--zy-tree-vt, 0px);
+  bottom: auto;
+  height: var(--zy-tree-vh, 100vh);
+  box-shadow: 2px 0 24px rgba(16, 24, 40, .18);
+}
 
 #zy-tree .zy-tree-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -819,6 +853,7 @@ html.zy-tree-push body { padding-left: var(--zy-tree-w) !important; }
 #zy-tree .zy-tree-row.zy-tree-empty { opacity: .55; }
 #zy-tree .zy-tree-row.zy-tree-static { cursor: default; color: #8b949e; }
 #zy-tree .zy-tree-row.zy-tree-static:hover { background: transparent; }
+#zy-tree .zy-tree-credit-row { letter-spacing: .2px; }
 @media (pointer: coarse) {
   #zy-tree .zy-tree-row { min-height: 34px; }
   #zy-tree .zy-tree-collapse { width: 30px; height: 30px; }
