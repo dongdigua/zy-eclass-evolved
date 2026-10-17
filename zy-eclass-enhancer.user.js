@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         延河课堂优化：待办显示课程名 · 隐藏课程 · 修正返回链接
+// @name         延河课堂优化：待办显示课程名 · 隐藏课程 · 修正返回链接 · 移动端按钮
 // @namespace    https://zy-eclass.bit.edu.cn/
-// @version      1.2.0
+// @version      1.2.1
 // @description  首页「待办事项」显示所属课程名称；「我的课程」默认隐藏指定关键字的课程（默认：大学物理实验），并在列表顶部提示隐藏数量；课程页左上角「返回」改回课程列表（原地址为站外域名）；修复手机竖屏下弹窗底部按钮（交作业「确认」）跑到屏幕外点不到的问题。想看被隐藏的课程时，在脚本管理器里禁用本脚本即可。
 // @match        https://zy-eclass.bit.edu.cn/*
 // @run-at       document-start
@@ -98,14 +98,14 @@ ${TODO_CARD_SEL} .todo-title.zy-has-course.zy-has-type .activity-type {
 .zy-mobile-popup.popup-area {
   width: var(--zy-vw) !important;
   height: var(--zy-vh) !important;
+  left: var(--zy-vx, 0px) !important;
+  top: var(--zy-vy, 0px) !important;
   overflow: auto !important;
 }
 .zy-mobile-popup > .popup-content {
   box-sizing: border-box !important;
   display: flex !important;
   flex-direction: column !important;
-  width: calc(var(--zy-vw) - 16px) !important;
-  max-width: calc(var(--zy-vw) - 16px) !important;
   height: auto !important;
   max-height: calc(var(--zy-vh) - 16px) !important;
   min-height: 0 !important;
@@ -115,6 +115,27 @@ ${TODO_CARD_SEL} .todo-title.zy-has-course.zy-has-type .activity-type {
 .zy-mobile-popup > .popup-content > .popup-footer {
   flex: 0 0 auto !important;
   position: relative;
+}
+/* 弹窗比屏幕宽时（如附件选择 900px），底部按钮组按可视宽度排布并拉长，
+   这样不用横向拖动就能点到 */
+.zy-mobile-popup > .popup-content > .popup-footer {
+  width: min(100%, var(--zy-vw)) !important;
+  box-sizing: border-box !important;
+}
+.zy-mobile-popup > .popup-content > .popup-footer .form-buttons {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px !important;
+  box-sizing: border-box;
+}
+.zy-mobile-popup > .popup-content > .popup-footer .form-buttons > .button,
+.zy-mobile-popup > .popup-content > .popup-footer > .button {
+  flex: 1 1 0 !important;
+  width: calc(100% - 16px) !important;
+  max-width: 220px !important;
+  margin: 0 !important;
 }
 .zy-mobile-popup > .popup-content > .main-area {
   flex: 1 1 auto !important;
@@ -286,22 +307,32 @@ ${TODO_CARD_SEL} .todo-title.zy-has-course.zy-has-type .activity-type {
     const vv = window.visualViewport;
     const w = Math.min(de.clientWidth || window.innerWidth, vv ? Math.round(vv.width) : Infinity);
     const h = Math.min(de.clientHeight || window.innerHeight, vv ? Math.round(vv.height) : Infinity);
-    return { w: w || window.innerWidth, h: h || window.innerHeight };
+    return {
+      w: w || window.innerWidth,
+      h: h || window.innerHeight,
+      x: vv ? Math.round(vv.offsetLeft) : 0,
+      y: vv ? Math.round(vv.offsetTop) : 0,
+    };
   }
 
   function enhanceMobilePopups() {
     const de = document.documentElement;
-    const { w, h } = visibleViewport();
-    // 窄屏、横向手机，或 layout viewport 明显高于可视区时都按可视区排版
-    const layoutGap = Math.abs(window.innerHeight - de.clientHeight) > 40;
-    const narrow = w <= CONFIG.mobilePopup.maxWidth || h <= 560 || layoutGap;
+    const view = visibleViewport();
+    // 只在真正出问题时才接管：弹窗按 layout viewport（100%）排版，
+    // 而它比可视区高（手机上的典型情况）。桌面窗口即使窄，两者也基本一致。
+    const layoutGap = window.innerHeight - de.clientHeight > 40;
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const fitNeeded = layoutGap || (coarse && view.w <= CONFIG.mobilePopup.maxWidth);
 
     document.querySelectorAll('.popup-area').forEach((modal) => {
-      const fit = CONFIG.mobilePopup.enabled && narrow && modal.classList.contains('open');
+      const fit = CONFIG.mobilePopup.enabled && fitNeeded && modal.classList.contains('open');
       setClass(modal, 'zy-mobile-popup', fit);
       if (!fit) return;
-      modal.style.setProperty('--zy-vw', w + 'px');
-      modal.style.setProperty('--zy-vh', h + 'px');
+      // 让浮层正好覆盖可视区（含视觉视口的偏移）
+      modal.style.setProperty('--zy-vw', view.w + 'px');
+      modal.style.setProperty('--zy-vh', view.h + 'px');
+      modal.style.setProperty('--zy-vx', view.x + 'px');
+      modal.style.setProperty('--zy-vy', view.y + 'px');
     });
   }
 
